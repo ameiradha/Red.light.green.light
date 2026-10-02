@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Common Helper Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // User Profile Validation Helper
+    function isValidUserProfile(data, userId) {
+      return data.uid == userId
+        && data.email is string
+        && data.email.size() > 0
+        && data.email.size() <= 256
+        && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 128))
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1024));
+    }
+
+    // Question Validation Helper
+    function isValidTeacherQuestion(data, userId) {
+      return data.userId == userId
+        && data.id is string
+        && data.id.size() > 0
+        && data.id.size() <= 128
+        && data.question is string
+        && data.question.size() > 0
+        && data.question.size() <= 1000
+        && data.options is map
+        && data.options.A is string && data.options.A.size() > 0 && data.options.A.size() <= 500
+        && data.options.B is string && data.options.B.size() > 0 && data.options.B.size() <= 500
+        && data.options.C is string && data.options.C.size() > 0 && data.options.C.size() <= 500
+        && data.options.D is string && data.options.D.size() > 0 && data.options.D.size() <= 500
+        && data.correctAnswer in ['A', 'B', 'C', 'D']
+        && data.difficulty in ['Easy', 'Medium', 'Hard', 'Bonus']
+        && data.movementSteps is number && data.movementSteps >= 1 && data.movementSteps <= 10;
+    }
+
+    // 1. User Profiles Collection
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow create, update: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming(), userId);
+      allow delete: if false;
+    }
+
+    // 2. Teacher Questions Collection (Stored strictly under the teacher's account)
+    match /teachers/{userId}/questions/{questionId} {
+      allow get, list: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidId(questionId) && isValidTeacherQuestion(incoming(), userId);
+      allow delete: if isOwner(userId) && isValidId(questionId);
+    }
+
+    // 3. Teacher Settings Collection
+    match /teachers/{userId}/settings/{settingsId} {
+      allow get, list: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidId(settingsId) && incoming().userId == userId;
+      allow delete: if isOwner(userId) && isValidId(settingsId);
+    }
+
+    // 4. Teacher Teams Collection
+    match /teachers/{userId}/teams/{teamId} {
+      allow get, list: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidId(teamId) && incoming().userId == userId;
+      allow delete: if isOwner(userId) && isValidId(teamId);
+    }
+  }
+}

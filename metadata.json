@@ -1,0 +1,6 @@
+{
+  "name": "Red Light, Green Light — 3D Classroom Quiz",
+  "description": "A safe, interactive 3D classroom quiz game show for primary school pupils featuring customizable teams, race track movement, red/green lights, and Guardian Hana.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

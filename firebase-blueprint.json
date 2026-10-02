@@ -1,0 +1,220 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated teacher user profile document",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the teacher"
+        },
+        "email": {
+          "type": "string",
+          "description": "Teacher Google email address"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Teacher display name"
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Teacher profile photo URL"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of account creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["uid", "email"]
+    },
+    "TeacherQuestion": {
+      "title": "TeacherQuestion",
+      "description": "Quiz question stored by the teacher Google account",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the question"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner teacher user ID"
+        },
+        "question": {
+          "type": "string",
+          "description": "Question prompt text"
+        },
+        "options": {
+          "type": "object",
+          "description": "Multiple choice options A, B, C, D"
+        },
+        "correctAnswer": {
+          "type": "string",
+          "enum": ["A", "B", "C", "D"],
+          "description": "The correct answer key"
+        },
+        "difficulty": {
+          "type": "string",
+          "enum": ["Easy", "Medium", "Hard", "Bonus"],
+          "description": "Question difficulty rating"
+        },
+        "points": {
+          "type": "number",
+          "description": "Points awarded for correct answer"
+        },
+        "movementSteps": {
+          "type": "number",
+          "description": "Steps avatar moves on correct answer"
+        },
+        "explanation": {
+          "type": "string",
+          "description": "Educational explanation shown during answer reveal"
+        },
+        "category": {
+          "type": "string",
+          "description": "Subject category tag"
+        },
+        "topic": {
+          "type": "string",
+          "description": "Topic name"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last updated timestamp"
+        }
+      },
+      "required": ["id", "userId", "question", "options", "correctAnswer", "difficulty", "movementSteps"]
+    },
+    "TeacherSettings": {
+      "title": "TeacherSettings",
+      "description": "Saved classroom game settings and preferences",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner teacher user ID"
+        },
+        "trackLength": {
+          "type": "number",
+          "description": "Track step length to finish line"
+        },
+        "timerDuration": {
+          "type": "number",
+          "description": "Timer countdown duration"
+        },
+        "answeringMode": {
+          "type": "string",
+          "description": "Classroom answering mode"
+        },
+        "enablePowerCards": {
+          "type": "boolean",
+          "description": "Whether power cards are enabled"
+        },
+        "enableStreakBonus": {
+          "type": "boolean",
+          "description": "Whether streak multipliers are enabled"
+        },
+        "graphicsQuality": {
+          "type": "string",
+          "description": "3D visual quality preset"
+        },
+        "soundEnabled": {
+          "type": "boolean",
+          "description": "Whether game audio is enabled"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last modified timestamp"
+        }
+      },
+      "required": ["userId", "trackLength", "answeringMode"]
+    },
+    "TeacherTeam": {
+      "title": "TeacherTeam",
+      "description": "Saved customized classroom student team",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique team ID"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner teacher user ID"
+        },
+        "name": {
+          "type": "string",
+          "description": "Team name"
+        },
+        "number": {
+          "type": "number",
+          "description": "Runner bib number"
+        },
+        "avatar": {
+          "type": "string",
+          "description": "Avatar style identifier"
+        },
+        "color": {
+          "type": "string",
+          "description": "Primary jersey color hex"
+        },
+        "secondaryColor": {
+          "type": "string",
+          "description": "Secondary accent color hex"
+        },
+        "position": {
+          "type": "number",
+          "description": "Current track position"
+        },
+        "score": {
+          "type": "number",
+          "description": "Current team score"
+        },
+        "correctAnswers": {
+          "type": "number",
+          "description": "Total correct answers count"
+        },
+        "wrongAnswers": {
+          "type": "number",
+          "description": "Total wrong answers count"
+        },
+        "streak": {
+          "type": "number",
+          "description": "Active streak count"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last updated timestamp"
+        }
+      },
+      "required": ["id", "userId", "name", "number", "avatar", "color"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Authenticated user profile document"
+    },
+    "/teachers/{userId}/questions/{questionId}": {
+      "schema": "TeacherQuestion",
+      "description": "Teacher custom and AI-generated quiz questions stored under their account"
+    },
+    "/teachers/{userId}/settings/{settingsId}": {
+      "schema": "TeacherSettings",
+      "description": "Teacher customized game rules and settings"
+    },
+    "/teachers/{userId}/teams/{teamId}": {
+      "schema": "TeacherTeam",
+      "description": "Teacher customized classroom teams"
+    }
+  }
+}
