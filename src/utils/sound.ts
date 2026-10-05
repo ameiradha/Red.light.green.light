@@ -259,6 +259,59 @@ class SoundEngine {
       osc.stop(start + item.d);
     });
   }
+
+  public playLock() {
+    if (this.isMuted) return;
+    const ctx = this.getContext();
+    if (!ctx) return;
+
+    // Secure mechanical latch & thud (two short clicks)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(320, ctx.currentTime);
+    osc1.frequency.exponentialRampToValueAtTime(120, ctx.currentTime + 0.08);
+    gain1.gain.setValueAtTime(0.22, ctx.currentTime);
+    gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start();
+    osc1.stop(ctx.currentTime + 0.08);
+
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(540, ctx.currentTime + 0.06);
+    osc2.frequency.exponentialRampToValueAtTime(220, ctx.currentTime + 0.16);
+    gain2.gain.setValueAtTime(0.2, ctx.currentTime + 0.06);
+    gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.16);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(ctx.currentTime + 0.06);
+    osc2.stop(ctx.currentTime + 0.16);
+  }
+
+  public playDrumroll() {
+    if (this.isMuted) return;
+    const ctx = this.getContext();
+    if (!ctx) return;
+
+    // Fast suspenseful snare drumroll taps
+    const count = 12;
+    for (let i = 0; i < count; i++) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const t = ctx.currentTime + (i * 0.06);
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(160 + (i * 8), t);
+      gain.gain.setValueAtTime(0.08 + (i * 0.01), t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.04);
+    }
+  }
 }
 
 export const sound = new SoundEngine();

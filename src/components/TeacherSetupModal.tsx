@@ -570,17 +570,20 @@ EXPLANATION: Our lungs absorb oxygen and exhale carbon dioxide.`
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-bold text-slate-400 mb-1">Count</label>
+                    <label className="text-[11px] font-bold text-slate-400 mb-1">Count (Up to 20)</label>
                     <select
                       value={aiCount}
                       onChange={e => setAiCount(Number(e.target.value))}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-bold"
                     >
                       <option value={4}>4 Questions</option>
                       <option value={6}>6 Questions</option>
                       <option value={8}>8 Questions</option>
                       <option value={10}>10 Questions</option>
                       <option value={12}>12 Questions</option>
+                      <option value={15}>15 Questions</option>
+                      <option value={18}>18 Questions</option>
+                      <option value={20}>20 Questions (Full Round)</option>
                     </select>
                   </div>
 

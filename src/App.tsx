@@ -5,6 +5,7 @@ import {
   GameSettings,
   GamePhase,
   LightState,
+  SecretTurnStep,
 } from './types/game';
 import {
   INITIAL_TEAMS,
@@ -51,9 +52,17 @@ export default function App() {
   const [phase, setPhase] = useState<GamePhase>('QUESTION_ACTIVE');
   const [lightState, setLightState] = useState<LightState>('GREEN');
   const [timerRemaining, setTimerRemaining] = useState<number | null>(null);
-  const [teamAnswers, setTeamAnswers] = useState<Record<string, 'A' | 'B' | 'C' | 'D' | null>>({});
-  const [activeTeamId, setActiveTeamId] = useState<string | null>(teams[0]?.id || null);
   const [winnerTeam, setWinnerTeam] = useState<Team | null>(null);
+
+  // ---------------- SECRET TURN MODE STATE ----------------
+  // Current active team index taking the turn (0 = Red, 1 = Blue, etc.)
+  const [activeTurnIndex, setActiveTurnIndex] = useState<number>(0);
+
+  // Secret turn sub-state
+  const [turnStep, setTurnStep] = useState<SecretTurnStep>('SELECTING');
+
+  // Secure team answers dictionary (hidden from UI until final reveal)
+  const [teamAnswers, setTeamAnswers] = useState<Record<string, 'A' | 'B' | 'C' | 'D' | null>>({});
 
   // UI Modes
   const [isProjectorMode, setIsProjectorMode] = useState<boolean>(false);
@@ -65,11 +74,10 @@ export default function App() {
 
   // Red light freeze & start countdowns
   const [freezeCountdown, setFreezeCountdown] = useState<number | null>(null);
-  const [startCountdown, setStartCountdown] = useState<number | null>(null);
 
   // ---------------- 1. AUTHENTICATION & FIRESTORE CLOUD SYNC ----------------
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser: User | null) => {
       setUser(currentUser);
       setIsAuthChecking(false);
 
@@ -119,6 +127,11 @@ export default function App() {
   // Current active question
   const currentQuestion = questions[currentIndex % questions.length] || null;
 
+  // Check if all teams have locked in their secret answers
+  const allAnswersLocked = teams.length > 0 && teams.every(
+    t => teamAnswers[t.id] !== null && teamAnswers[t.id] !== undefined
+  );
+
   // ---------------- RESET GAME STATE ----------------
   const handleResetGame = useCallback(() => {
     setTeams(prev =>
@@ -137,14 +150,42 @@ export default function App() {
     setCurrentIndex(0);
     setWinnerTeam(null);
     setTeamAnswers({});
+    setActiveTurnIndex(0);
+    setTurnStep('SELECTING');
     setLightState('GREEN');
     setPhase('QUESTION_ACTIVE');
     setTimerRemaining(null);
     sound.playGreenLight();
   }, []);
 
-  // ---------------- REVEAL ANSWERS & ADVANCE AVATARS ----------------
-  const handleRevealAnswer = useCallback(() => {
+  // ---------------- SECRET TURN: LOCK IN TEAM ANSWER ----------------
+  const handleLockTeamAnswer = useCallback((teamId: string, answer: 'A' | 'B' | 'C' | 'D') => {
+    setTeamAnswers(prev => ({
+      ...prev,
+      [teamId]: answer,
+    }));
+  }, []);
+
+  // ---------------- SECRET TURN: TRIGGER SIMULTANEOUS REVEAL ----------------
+  const handleTriggerReveal = useCallback(() => {
+    if (!currentQuestion) return;
+
+    const correctOpt = currentQuestion.correctAnswer.trim().toUpperCase();
+    const anyCorrect = teams.some(t => {
+      const ans = teamAnswers[t.id];
+      return ans && ans.trim().toUpperCase() === correctOpt;
+    });
+
+    setPhase('ANSWER_REVEAL');
+    if (anyCorrect) {
+      sound.playCorrect();
+    } else {
+      sound.playWrong();
+    }
+  }, [currentQuestion, teamAnswers, teams]);
+
+  // ---------------- SECRET TURN: RUN AVATARS & ADVANCE ----------------
+  const handleRunAndAdvance = useCallback(() => {
     if (!currentQuestion) return;
 
     const correctOpt = currentQuestion.correctAnswer.trim().toUpperCase();
@@ -187,16 +228,11 @@ export default function App() {
       };
     });
 
-    // 1. Immediately switch phase to MOVING_AVATARS so running animation starts!
+    // 1. Switch phase to MOVING_AVATARS so 3D running animation starts!
     setPhase('MOVING_AVATARS');
-    if (anyCorrect) {
-      sound.playCorrect();
-      sound.playFootsteps();
-    } else {
-      sound.playWrong();
-    }
+    sound.playFootsteps();
 
-    // 2. IMMEDIATELY update positions of the correct teams in state!
+    // 2. Update positions of the correct teams in state
     setTeams(prevTeams =>
       prevTeams.map(team => {
         const ev = evaluations.find(e => e.id === team.id);
@@ -224,7 +260,7 @@ export default function App() {
       })
     );
 
-    // 3. After 2.4 seconds of running, check for finish line winner or auto-advance directly to the next question
+    // 3. After 2.4s of running: check for finish line winner or advance to next question
     setTimeout(() => {
       setTeams(currentTeams => {
         const champ = currentTeams.find(t => t.position >= settings.trackLength);
@@ -233,9 +269,11 @@ export default function App() {
           setPhase('WINNER_CELEBRATION');
           sound.playVictory();
         } else {
-          // Automatically advance directly to the next question!
+          // Advance to next question!
           setCurrentIndex(prev => (prev + 1) % questions.length);
           setTeamAnswers({});
+          setActiveTurnIndex(0);
+          setTurnStep('SELECTING');
           setLightState('GREEN');
           setPhase('QUESTION_ACTIVE');
           sound.playGreenLight();
@@ -252,6 +290,8 @@ export default function App() {
     sound.playClick();
     setCurrentIndex(prev => (prev + 1) % questions.length);
     setTeamAnswers({});
+    setActiveTurnIndex(0);
+    setTurnStep('SELECTING');
     setLightState('GREEN');
     setPhase('QUESTION_ACTIVE');
     sound.playGreenLight();
@@ -262,6 +302,8 @@ export default function App() {
     sound.playClick();
     setCurrentIndex(prev => (prev + 1) % questions.length);
     setTeamAnswers({});
+    setActiveTurnIndex(0);
+    setTurnStep('SELECTING');
     setLightState('GREEN');
     setPhase('QUESTION_ACTIVE');
     sound.playGreenLight();
@@ -288,22 +330,6 @@ export default function App() {
       setFreezeCountdown(null);
     }
   }, [lightState]);
-
-  // ---------------- SELECT TEAM ANSWER ----------------
-  const handleSelectTeamAnswer = useCallback(
-    (teamId: string, answer: 'A' | 'B' | 'C' | 'D') => {
-      if (lightState === 'RED' || phase === 'MOVING_AVATARS') {
-        sound.playWrong();
-        return;
-      }
-      sound.playClick();
-      setTeamAnswers(prev => ({
-        ...prev,
-        [teamId]: prev[teamId] === answer ? null : answer,
-      }));
-    },
-    [lightState, phase]
-  );
 
   // ---------------- USE POWER CARD ----------------
   const handleUsePowerCard = useCallback((teamId: string) => {
@@ -424,7 +450,7 @@ export default function App() {
 
       {/* MAIN HEADS-UP DISPLAY (HUD) */}
       {!isArenaFocused && (
-        <main className="relative z-10 flex-1 flex flex-col justify-between p-3 md:p-5 pointer-events-none">
+        <main className="relative z-10 flex-1 flex flex-col justify-between p-2.5 md:p-4 pointer-events-none overflow-hidden">
           {/* TOP BAR: Scoreboard / Contestant Avatars */}
           <header className="w-full flex items-start justify-between gap-3">
             <div className="pointer-events-auto">
@@ -436,9 +462,9 @@ export default function App() {
             </div>
           </header>
 
-          {/* MIDDLE AREA: Left Question Panel & Right Teams Input Cards */}
-          <div className="flex-1 flex items-center justify-between gap-4 my-2 overflow-hidden">
-            {/* Left: Big Vertical Question Card */}
+          {/* MIDDLE AREA: Secret Turn Question Panel & Right Teams Status Cards */}
+          <div className="flex-1 flex items-stretch justify-between gap-3 md:gap-4 my-1.5 overflow-hidden">
+            {/* Left/Center: Secret Turn Question Controller */}
             <LeftQuestionPanel
               question={currentQuestion}
               currentIndex={currentIndex}
@@ -448,33 +474,32 @@ export default function App() {
               timerRemaining={timerRemaining}
               timerDuration={settings.timerDuration}
               isProjectorMode={isProjectorMode}
-              onSelectOptionForActiveTeam={
-                activeTeamId
-                  ? option => handleSelectTeamAnswer(activeTeamId, option)
-                  : undefined
-              }
-              onRevealAnswer={handleRevealAnswer}
-              onNextQuestion={handleNextQuestion}
-              onSkipQuestion={handleSkipQuestion}
-              activeTeam={teams.find(t => t.id === activeTeamId) || teams[0]}
+              activeTurnIndex={activeTurnIndex}
+              onActiveTurnChange={setActiveTurnIndex}
               teams={teams}
               teamAnswers={teamAnswers}
+              onLockTeamAnswer={handleLockTeamAnswer}
+              turnStep={turnStep}
+              onTurnStepChange={setTurnStep}
+              onTriggerReveal={handleTriggerReveal}
+              onRunAndAdvance={handleRunAndAdvance}
+              onNextQuestion={handleNextQuestion}
+              onSkipQuestion={handleSkipQuestion}
               hasWinner={Boolean(winnerTeam)}
             />
 
-            {/* Right: Interactive Team Cards & Answering Controls */}
+            {/* Right: Interactive Team Cards & Anti-Cheating Status Display */}
             <RightTeamsPanel
               teams={teams}
               trackLength={settings.trackLength}
-              activeTeamId={activeTeamId}
-              onSelectActiveTeam={setActiveTeamId}
+              activeTurnIndex={activeTurnIndex}
               teamAnswers={teamAnswers}
-              onTeamAnswer={handleSelectTeamAnswer}
-              onUsePowerCard={handleUsePowerCard}
               phase={phase}
               lightState={lightState}
               isProjectorMode={isProjectorMode}
               enablePowerCards={settings.enablePowerCards}
+              onUsePowerCard={handleUsePowerCard}
+              correctAnswer={currentQuestion?.correctAnswer}
             />
           </div>
 
@@ -490,7 +515,7 @@ export default function App() {
                 sound.playClick();
                 setPhase(prev => (prev === 'PAUSED' ? 'QUESTION_ACTIVE' : 'PAUSED'));
               }}
-              onRevealAnswer={handleRevealAnswer}
+              onRevealAnswer={phase === 'ANSWER_REVEAL' ? handleRunAndAdvance : handleTriggerReveal}
               onNextQuestion={handleNextQuestion}
               onSkipQuestion={handleSkipQuestion}
               onToggleLight={handleToggleLight}
@@ -518,6 +543,8 @@ export default function App() {
               onToggleArenaFocus={() => setIsArenaFocused(prev => !prev)}
               user={user}
               onLogout={handleLogout}
+              turnStep={turnStep}
+              allAnswersLocked={allAnswersLocked}
             />
           </footer>
         </main>

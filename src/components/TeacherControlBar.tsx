@@ -1,5 +1,5 @@
 import React from 'react';
-import { GamePhase, LightState } from '../types/game';
+import { GamePhase, LightState, SecretTurnStep } from '../types/game';
 import {
   Play,
   Pause,
@@ -15,6 +15,8 @@ import {
   Maximize2,
   Minimize2,
   LogOut,
+  Lock,
+  Sparkles,
 } from 'lucide-react';
 
 interface TeacherControlBarProps {
@@ -38,6 +40,8 @@ interface TeacherControlBarProps {
   onToggleArenaFocus?: () => void;
   user?: any;
   onLogout?: () => void;
+  turnStep?: SecretTurnStep;
+  allAnswersLocked?: boolean;
 }
 
 export const TeacherControlBar: React.FC<TeacherControlBarProps> = ({
@@ -61,11 +65,14 @@ export const TeacherControlBar: React.FC<TeacherControlBarProps> = ({
   onToggleArenaFocus,
   user,
   onLogout,
+  turnStep,
+  allAnswersLocked = false,
 }) => {
   const isGreen = lightState === 'GREEN';
   const isPaused = phase === 'PAUSED';
   const isQuestionActive = phase === 'QUESTION_ACTIVE';
-  const isRevealed = phase === 'ANSWER_REVEAL' || phase === 'MOVING_AVATARS';
+  const isRevealed = phase === 'ANSWER_REVEAL';
+  const isMoving = phase === 'MOVING_AVATARS';
 
   return (
     <div className="w-full bg-slate-900/95 backdrop-blur-xl border-t border-slate-800 px-3 md:px-4 py-2 shadow-2xl text-white select-none">
@@ -86,18 +93,35 @@ export const TeacherControlBar: React.FC<TeacherControlBarProps> = ({
             <span>{isPaused ? 'RESUME' : 'PAUSE'}</span>
           </button>
 
-          {/* Reveal Answers Primary Action */}
-          {isQuestionActive && (
+          {/* Reveal Answers / Action Buttons based on Secret Turn State */}
+          {isQuestionActive && allAnswersLocked && (
             <button
               onClick={onRevealAnswer}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl font-extrabold text-xs bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-md shadow-cyan-500/20 active:scale-95 transition-all"
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl font-extrabold text-xs bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-md shadow-cyan-500/20 active:scale-95 transition-all animate-pulse"
             >
               <Eye className="w-3.5 h-3.5" />
-              <span>REVEAL & RUN</span>
+              <span>REVEAL ANSWERS</span>
             </button>
           )}
 
-          {isRevealed && !hasWinner && (
+          {isQuestionActive && !allAnswersLocked && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs bg-slate-800 border border-slate-700 text-slate-400">
+              <Lock className="w-3 h-3 text-cyan-400" />
+              <span>SECRET TURNS ACTIVE</span>
+            </div>
+          )}
+
+          {isRevealed && (
+            <button
+              onClick={onRevealAnswer}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl font-extrabold text-xs bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-md shadow-emerald-500/20 active:scale-95 transition-all animate-pulse"
+            >
+              <span>RUN & ADVANCE</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
+
+          {isMoving && !hasWinner && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold text-xs bg-slate-800 border border-emerald-500/40 text-emerald-300 animate-pulse">
               <span>🏃 SPRINTING...</span>
             </div>
@@ -178,9 +202,9 @@ export const TeacherControlBar: React.FC<TeacherControlBarProps> = ({
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-bold text-xs transition-all border ${
               isProjectorMode
                 ? 'bg-purple-600 border-purple-400 text-white shadow-md shadow-purple-500/30'
-                : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
             }`}
-            title="Toggle Classroom Projector Mode (Enlarged fonts & max visibility)"
+            title="Toggle Projector Optimized High-Contrast Mode"
           >
             <Tv className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">PROJECTOR</span>

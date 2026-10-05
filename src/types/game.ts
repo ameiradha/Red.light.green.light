@@ -70,10 +70,20 @@ export interface GameSettings {
   soundEnabled: boolean;
 }
 
+export type SecretTurnStep =
+  | 'SELECTING'
+  | 'CONFIRMING'
+  | 'LOCKED_PASS'
+  | 'ALL_LOCKED'
+  | 'REVEAL_COUNTDOWN'
+  | 'REVEALED';
+
 export type GamePhase = 
   | 'START_COUNTDOWN'
   | 'QUESTION_ACTIVE'
+  | 'REVEAL_COUNTDOWN'
   | 'ANSWER_REVEAL'
   | 'MOVING_AVATARS'
   | 'WINNER_CELEBRATION'
   | 'PAUSED';
+
