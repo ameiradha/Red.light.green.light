@@ -85,6 +85,7 @@ Return the questions matching the required JSON schema strictly.`;
         model: model,
         contents: prompt,
         config: {
+          maxOutputTokens: 8192,
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.ARRAY,

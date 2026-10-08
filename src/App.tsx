@@ -5,7 +5,6 @@ import {
   GameSettings,
   GamePhase,
   LightState,
-  SecretTurnStep,
 } from './types/game';
 import {
   INITIAL_TEAMS,
@@ -51,18 +50,11 @@ export default function App() {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [phase, setPhase] = useState<GamePhase>('QUESTION_ACTIVE');
   const [lightState, setLightState] = useState<LightState>('GREEN');
-  const [timerRemaining, setTimerRemaining] = useState<number | null>(null);
   const [winnerTeam, setWinnerTeam] = useState<Team | null>(null);
 
-  // ---------------- SECRET TURN MODE STATE ----------------
-  // Current active team index taking the turn (0 = Red, 1 = Blue, etc.)
+  // Team turns: Each team answers a DIFFERENT question sequentially
   const [activeTurnIndex, setActiveTurnIndex] = useState<number>(0);
-
-  // Secret turn sub-state
-  const [turnStep, setTurnStep] = useState<SecretTurnStep>('SELECTING');
-
-  // Secure team answers dictionary (hidden from UI until final reveal)
-  const [teamAnswers, setTeamAnswers] = useState<Record<string, 'A' | 'B' | 'C' | 'D' | null>>({});
+  const [selectedOption, setSelectedOption] = useState<'A' | 'B' | 'C' | 'D' | null>(null);
 
   // UI Modes
   const [isProjectorMode, setIsProjectorMode] = useState<boolean>(false);
@@ -72,7 +64,7 @@ export default function App() {
   const [showScoreboardModal, setShowScoreboardModal] = useState<boolean>(false);
   const [isArenaFocused, setIsArenaFocused] = useState<boolean>(false);
 
-  // Red light freeze & start countdowns
+  // Red light freeze countdown
   const [freezeCountdown, setFreezeCountdown] = useState<number | null>(null);
 
   // ---------------- 1. AUTHENTICATION & FIRESTORE CLOUD SYNC ----------------
@@ -107,7 +99,6 @@ export default function App() {
             setTeams(storedTeams);
           }
 
-          // Per requirement: "Then after login, go to the teacher control page"
           setShowSetupModal(true);
         } catch (err) {
           console.error('Error fetching teacher data from Firestore:', err);
@@ -124,13 +115,10 @@ export default function App() {
     setSoundEnabled(settings.soundEnabled);
   }, [settings.soundEnabled]);
 
-  // Current active question
+  // Current active question and active team
   const currentQuestion = questions[currentIndex % questions.length] || null;
-
-  // Check if all teams have locked in their secret answers
-  const allAnswersLocked = teams.length > 0 && teams.every(
-    t => teamAnswers[t.id] !== null && teamAnswers[t.id] !== undefined
-  );
+  const activeTeam = teams[activeTurnIndex % teams.length] || teams[0];
+  const nextTeam = teams[(activeTurnIndex + 1) % teams.length] || teams[0];
 
   // ---------------- RESET GAME STATE ----------------
   const handleResetGame = useCallback(() => {
@@ -148,164 +136,111 @@ export default function App() {
       }))
     );
     setCurrentIndex(0);
-    setWinnerTeam(null);
-    setTeamAnswers({});
     setActiveTurnIndex(0);
-    setTurnStep('SELECTING');
+    setSelectedOption(null);
+    setWinnerTeam(null);
     setLightState('GREEN');
     setPhase('QUESTION_ACTIVE');
-    setTimerRemaining(null);
     sound.playGreenLight();
   }, []);
 
-  // ---------------- SECRET TURN: LOCK IN TEAM ANSWER ----------------
-  const handleLockTeamAnswer = useCallback((teamId: string, answer: 'A' | 'B' | 'C' | 'D') => {
-    setTeamAnswers(prev => ({
-      ...prev,
-      [teamId]: answer,
-    }));
-  }, []);
+  // ---------------- SUBMIT & REVEAL ANSWER FOR ACTIVE TEAM ----------------
+  const handleSubmitAnswer = useCallback(() => {
+    if (!currentQuestion || !selectedOption || !activeTeam) return;
 
-  // ---------------- SECRET TURN: TRIGGER SIMULTANEOUS REVEAL ----------------
-  const handleTriggerReveal = useCallback(() => {
-    if (!currentQuestion) return;
+    const isAnswerCorrect = selectedOption.trim().toUpperCase() === currentQuestion.correctAnswer.trim().toUpperCase();
 
-    const correctOpt = currentQuestion.correctAnswer.trim().toUpperCase();
-    const anyCorrect = teams.some(t => {
-      const ans = teamAnswers[t.id];
-      return ans && ans.trim().toUpperCase() === correctOpt;
-    });
+    let stepBonus = 0;
+    let newStreak = activeTeam.streak;
 
-    setPhase('ANSWER_REVEAL');
-    if (anyCorrect) {
+    if (isAnswerCorrect) {
+      newStreak = activeTeam.streak + 1;
+      if (settings.enableStreakBonus) {
+        if (newStreak >= 5) stepBonus += 3;
+        else if (newStreak >= 3) stepBonus += 2;
+        else if (newStreak >= 2) stepBonus += 1;
+      }
       sound.playCorrect();
     } else {
+      if (activeTeam.powerCard?.id === 'safe_answer' && activeTeam.powerCard.used) {
+        // Protected by power card
+      } else {
+        newStreak = 0;
+      }
       sound.playWrong();
     }
-  }, [currentQuestion, teamAnswers, teams]);
 
-  // ---------------- SECRET TURN: RUN AVATARS & ADVANCE ----------------
-  const handleRunAndAdvance = useCallback(() => {
-    if (!currentQuestion) return;
+    const totalSteps = isAnswerCorrect ? (currentQuestion.movementSteps + stepBonus) : 0;
+    const scoreGain = isAnswerCorrect ? (currentQuestion.points + stepBonus * 10) : 0;
 
-    const correctOpt = currentQuestion.correctAnswer.trim().toUpperCase();
-    let anyCorrect = false;
-
-    // Strict evaluation: Any team whose answer matches the correct answer moves forward!
-    const evaluations = teams.map(team => {
-      const answer = teamAnswers[team.id];
-      const isCorrect = Boolean(answer && answer.trim().toUpperCase() === correctOpt);
-      if (isCorrect) anyCorrect = true;
-
-      let stepBonus = 0;
-      let newStreak = team.streak;
-
-      if (isCorrect) {
-        newStreak = team.streak + 1;
-        if (settings.enableStreakBonus) {
-          if (newStreak >= 5) stepBonus += 3;
-          else if (newStreak >= 3) stepBonus += 2;
-          else if (newStreak >= 2) stepBonus += 1;
-        }
-      } else {
-        if (team.powerCard?.id === 'safe_answer' && team.powerCard.used) {
-          // Protected
-        } else {
-          newStreak = 0;
-        }
-      }
-
-      const totalSteps = isCorrect ? (currentQuestion.movementSteps + stepBonus) : 0;
-      const scoreGain = isCorrect ? (currentQuestion.points + stepBonus * 10) : 0;
-
-      return {
-        id: team.id,
-        isCorrect,
-        totalSteps,
-        scoreGain,
-        newStreak,
-        answer: answer || null,
-      };
-    });
-
-    // 1. Switch phase to MOVING_AVATARS so 3D running animation starts!
-    setPhase('MOVING_AVATARS');
-    sound.playFootsteps();
-
-    // 2. Update positions of the correct teams in state
+    // Update active team's score, position, and streak
     setTeams(prevTeams =>
-      prevTeams.map(team => {
-        const ev = evaluations.find(e => e.id === team.id);
-        if (!ev || !ev.isCorrect || ev.totalSteps <= 0) {
+      prevTeams.map(t => {
+        if (t.id === activeTeam.id) {
+          const newPos = Math.min(t.position + totalSteps, settings.trackLength);
           return {
-            ...team,
-            lastAnswer: ev ? ev.answer : null,
-            lastAnswerCorrect: false,
-            lastStepDelta: 0,
-            streak: 0,
+            ...t,
+            position: newPos,
+            score: t.score + scoreGain,
+            correctAnswers: isAnswerCorrect ? t.correctAnswers + 1 : t.correctAnswers,
+            wrongAnswers: !isAnswerCorrect ? t.wrongAnswers + 1 : t.wrongAnswers,
+            streak: newStreak,
+            lastAnswer: selectedOption,
+            lastAnswerCorrect: isAnswerCorrect,
+            lastStepDelta: totalSteps,
           };
         }
-
-        const newPos = Math.min(team.position + ev.totalSteps, settings.trackLength);
-        return {
-          ...team,
-          position: newPos,
-          score: team.score + ev.scoreGain,
-          correctAnswers: team.correctAnswers + 1,
-          streak: ev.newStreak,
-          lastAnswer: ev.answer,
-          lastAnswerCorrect: true,
-          lastStepDelta: ev.totalSteps,
-        };
+        return t;
       })
     );
 
-    // 3. After 2.4s of running: check for finish line winner or advance to next question
-    setTimeout(() => {
-      setTeams(currentTeams => {
-        const champ = currentTeams.find(t => t.position >= settings.trackLength);
-        if (champ) {
-          setWinnerTeam(champ);
-          setPhase('WINNER_CELEBRATION');
-          sound.playVictory();
-        } else {
-          // Advance to next question!
-          setCurrentIndex(prev => (prev + 1) % questions.length);
-          setTeamAnswers({});
-          setActiveTurnIndex(0);
-          setTurnStep('SELECTING');
-          setLightState('GREEN');
-          setPhase('QUESTION_ACTIVE');
-          sound.playGreenLight();
-        }
-        return currentTeams;
-      });
-    }, 2400);
-  }, [currentQuestion, teamAnswers, settings, teams, questions.length]);
+    if (isAnswerCorrect && totalSteps > 0) {
+      // Animate avatar movement
+      setPhase('MOVING_AVATARS');
+      sound.playFootsteps();
 
-  // ---------------- SKIP / NEXT QUESTION ----------------
-  const handleNextQuestion = useCallback(() => {
+      setTimeout(() => {
+        setTeams(currentTeams => {
+          const updatedActive = currentTeams.find(t => t.id === activeTeam.id);
+          if (updatedActive && updatedActive.position >= settings.trackLength) {
+            setWinnerTeam(updatedActive);
+            setPhase('WINNER_CELEBRATION');
+            sound.playVictory();
+          } else {
+            setPhase('ANSWER_REVEAL');
+          }
+          return currentTeams;
+        });
+      }, 2200);
+    } else {
+      setPhase('ANSWER_REVEAL');
+    }
+  }, [currentQuestion, selectedOption, activeTeam, settings]);
+
+  // ---------------- ADVANCE TO NEXT QUESTION & NEXT TEAM ----------------
+  // Each team answers a different question from the 50-question pool!
+  const handleNextQuestionAndTeam = useCallback(() => {
     if (winnerTeam) return;
 
     sound.playClick();
+    // Advance to next unique question
     setCurrentIndex(prev => (prev + 1) % questions.length);
-    setTeamAnswers({});
-    setActiveTurnIndex(0);
-    setTurnStep('SELECTING');
-    setLightState('GREEN');
+    // Advance to next team
+    setActiveTurnIndex(prev => (prev + 1) % teams.length);
+    // Reset selection for new question
+    setSelectedOption(null);
     setPhase('QUESTION_ACTIVE');
+    setLightState('GREEN');
     sound.playGreenLight();
-  }, [winnerTeam, questions.length]);
+  }, [winnerTeam, questions.length, teams.length]);
 
   // ---------------- SKIP QUESTION ----------------
   const handleSkipQuestion = useCallback(() => {
     sound.playClick();
     setCurrentIndex(prev => (prev + 1) % questions.length);
-    setTeamAnswers({});
-    setActiveTurnIndex(0);
-    setTurnStep('SELECTING');
-    setLightState('GREEN');
+    setSelectedOption(null);
     setPhase('QUESTION_ACTIVE');
+    setLightState('GREEN');
     sound.playGreenLight();
   }, [questions.length]);
 
@@ -388,7 +323,7 @@ export default function App() {
         <div className="w-12 h-12 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center mb-4 animate-pulse">
           <Loader2 className="w-6 h-6 text-cyan-400 animate-spin" />
         </div>
-        <p className="text-sm font-bold text-slate-300">Loading Red Light, Green Light Classroom...</p>
+        <p className="text-sm font-bold text-slate-300">Memuatkan Permainan Lampu Merah, Lampu Hijau...</p>
       </div>
     );
   }
@@ -403,7 +338,6 @@ export default function App() {
             setShowSetupModal(true);
           }}
         />
-        {/* Play Teacher Panel Music on Login Screen */}
         <BackgroundMusicPlayer
           isTeacherPanel={true}
           isPaused={false}
@@ -435,7 +369,7 @@ export default function App() {
           onClick={() => setIsArenaFocused(false)}
           className="absolute top-4 right-4 z-40 px-4 py-2 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-cyan-400 text-cyan-300 text-xs font-black shadow-2xl backdrop-blur-md flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
         >
-          <span>✕ EXIT FULL 3D VIEW</span>
+          <span>✕ KELUAR PANDANGAN 3D</span>
         </button>
       )}
 
@@ -462,44 +396,41 @@ export default function App() {
             </div>
           </header>
 
-          {/* MIDDLE AREA: Secret Turn Question Panel & Right Teams Status Cards */}
+          {/* MIDDLE AREA: Left Question Panel & Right Teams Status Cards */}
           <div className="flex-1 flex items-stretch justify-between gap-3 md:gap-4 my-1.5 overflow-hidden">
-            {/* Left/Center: Secret Turn Question Controller */}
+            {/* Left: Direct Question Panel with Fixed A, B, C, D order for Active Team */}
             <LeftQuestionPanel
               question={currentQuestion}
               currentIndex={currentIndex}
               totalQuestions={questions.length}
               phase={phase}
               lightState={lightState}
-              timerRemaining={timerRemaining}
-              timerDuration={settings.timerDuration}
               isProjectorMode={isProjectorMode}
-              activeTurnIndex={activeTurnIndex}
-              onActiveTurnChange={setActiveTurnIndex}
-              teams={teams}
-              teamAnswers={teamAnswers}
-              onLockTeamAnswer={handleLockTeamAnswer}
-              turnStep={turnStep}
-              onTurnStepChange={setTurnStep}
-              onTriggerReveal={handleTriggerReveal}
-              onRunAndAdvance={handleRunAndAdvance}
-              onNextQuestion={handleNextQuestion}
+              activeTeam={activeTeam}
+              nextTeam={nextTeam}
+              selectedOption={selectedOption}
+              onSelectOption={setSelectedOption}
+              onSubmitAnswer={handleSubmitAnswer}
+              onNextQuestionAndTeam={handleNextQuestionAndTeam}
               onSkipQuestion={handleSkipQuestion}
               hasWinner={Boolean(winnerTeam)}
             />
 
-            {/* Right: Interactive Team Cards & Anti-Cheating Status Display */}
+            {/* Right: Team Progress & Status Panel */}
             <RightTeamsPanel
               teams={teams}
               trackLength={settings.trackLength}
               activeTurnIndex={activeTurnIndex}
-              teamAnswers={teamAnswers}
+              onSelectActiveTeam={(idx) => {
+                setActiveTurnIndex(idx);
+                setSelectedOption(null);
+                setPhase('QUESTION_ACTIVE');
+              }}
               phase={phase}
               lightState={lightState}
               isProjectorMode={isProjectorMode}
               enablePowerCards={settings.enablePowerCards}
               onUsePowerCard={handleUsePowerCard}
-              correctAnswer={currentQuestion?.correctAnswer}
             />
           </div>
 
@@ -515,8 +446,8 @@ export default function App() {
                 sound.playClick();
                 setPhase(prev => (prev === 'PAUSED' ? 'QUESTION_ACTIVE' : 'PAUSED'));
               }}
-              onRevealAnswer={phase === 'ANSWER_REVEAL' ? handleRunAndAdvance : handleTriggerReveal}
-              onNextQuestion={handleNextQuestion}
+              onRevealAnswer={phase === 'ANSWER_REVEAL' ? handleNextQuestionAndTeam : handleSubmitAnswer}
+              onNextQuestion={handleNextQuestionAndTeam}
               onSkipQuestion={handleSkipQuestion}
               onToggleLight={handleToggleLight}
               onToggleProjectorMode={() => {
@@ -543,14 +474,13 @@ export default function App() {
               onToggleArenaFocus={() => setIsArenaFocused(prev => !prev)}
               user={user}
               onLogout={handleLogout}
-              turnStep={turnStep}
-              allAnswersLocked={allAnswersLocked}
+              hasSelectedOption={Boolean(selectedOption)}
             />
           </footer>
         </main>
       )}
 
-      {/* TEACHER SETUP MODAL (OPENS FIRST AFTER LOGIN & WHEN CLICKED) */}
+      {/* TEACHER SETUP MODAL */}
       <TeacherSetupModal
         isOpen={showSetupModal}
         onClose={() => setShowSetupModal(false)}
@@ -592,7 +522,7 @@ export default function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
           <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-3xl p-6 shadow-2xl">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-              <h2 className="text-xl font-black text-white">Classroom Leaderboard</h2>
+              <h2 className="text-xl font-black text-white">Kedudukan Markah Kelas</h2>
               <button
                 onClick={() => setShowScoreboardModal(false)}
                 className="text-slate-400 hover:text-white"
@@ -609,7 +539,7 @@ export default function App() {
         </div>
       )}
 
-      {/* BACKGROUND MUSIC PLAYER (Plays https://youtu.be/q7uTnxYFDSw in Teacher Panel, https://youtu.be/7lkTqbH3WaI in Game) */}
+      {/* BACKGROUND MUSIC PLAYER */}
       <BackgroundMusicPlayer
         isTeacherPanel={showSetupModal}
         isPaused={phase === 'PAUSED'}

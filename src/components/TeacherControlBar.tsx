@@ -1,5 +1,5 @@
 import React from 'react';
-import { GamePhase, LightState, SecretTurnStep } from '../types/game';
+import { GamePhase, LightState } from '../types/game';
 import {
   Play,
   Pause,
@@ -15,8 +15,7 @@ import {
   Maximize2,
   Minimize2,
   LogOut,
-  Lock,
-  Sparkles,
+  Send,
 } from 'lucide-react';
 
 interface TeacherControlBarProps {
@@ -40,8 +39,7 @@ interface TeacherControlBarProps {
   onToggleArenaFocus?: () => void;
   user?: any;
   onLogout?: () => void;
-  turnStep?: SecretTurnStep;
-  allAnswersLocked?: boolean;
+  hasSelectedOption?: boolean;
 }
 
 export const TeacherControlBar: React.FC<TeacherControlBarProps> = ({
@@ -65,8 +63,7 @@ export const TeacherControlBar: React.FC<TeacherControlBarProps> = ({
   onToggleArenaFocus,
   user,
   onLogout,
-  turnStep,
-  allAnswersLocked = false,
+  hasSelectedOption = false,
 }) => {
   const isGreen = lightState === 'GREEN';
   const isPaused = phase === 'PAUSED';
@@ -87,43 +84,43 @@ export const TeacherControlBar: React.FC<TeacherControlBarProps> = ({
                 ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                 : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
             }`}
-            title="Pause or Resume game"
+            title="Jeda atau Sambung Permainan"
           >
             {isPaused ? <Play className="w-3.5 h-3.5 fill-current" /> : <Pause className="w-3.5 h-3.5" />}
-            <span>{isPaused ? 'RESUME' : 'PAUSE'}</span>
+            <span>{isPaused ? 'SAMBUNG' : 'JEDA'}</span>
           </button>
 
-          {/* Reveal Answers / Action Buttons based on Secret Turn State */}
-          {isQuestionActive && allAnswersLocked && (
+          {/* Reveal / Submit answer button */}
+          {isQuestionActive && (
             <button
               onClick={onRevealAnswer}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl font-extrabold text-xs bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-md shadow-cyan-500/20 active:scale-95 transition-all animate-pulse"
+              disabled={!hasSelectedOption}
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-xl font-extrabold text-xs transition-all ${
+                hasSelectedOption
+                  ? 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-md shadow-cyan-500/20 active:scale-95 animate-pulse'
+                  : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+              }`}
             >
               <Eye className="w-3.5 h-3.5" />
-              <span>REVEAL ANSWERS</span>
+              <span>SEMAK JAWAPAN</span>
             </button>
           )}
 
-          {isQuestionActive && !allAnswersLocked && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs bg-slate-800 border border-slate-700 text-slate-400">
-              <Lock className="w-3 h-3 text-cyan-400" />
-              <span>SECRET TURNS ACTIVE</span>
-            </div>
-          )}
-
-          {isRevealed && (
+          {/* Next question button */}
+          {isRevealed && !hasWinner && (
             <button
-              onClick={onRevealAnswer}
+              onClick={onNextQuestion}
               className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl font-extrabold text-xs bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-md shadow-emerald-500/20 active:scale-95 transition-all animate-pulse"
             >
-              <span>RUN & ADVANCE</span>
+              <span>SOALAN SETERUSNYA</span>
               <ChevronRight className="w-4 h-4" />
             </button>
           )}
 
+          {/* Moving status */}
           {isMoving && !hasWinner && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-extrabold text-xs bg-slate-800 border border-emerald-500/40 text-emerald-300 animate-pulse">
-              <span>🏃 SPRINTING...</span>
+              <span>🏃 MARA DI TREK...</span>
             </div>
           )}
 
@@ -132,10 +129,10 @@ export const TeacherControlBar: React.FC<TeacherControlBarProps> = ({
             <button
               onClick={onSkipQuestion}
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all"
-              title="Skip this question"
+              title="Langkau soalan ini"
             >
               <SkipForward className="w-3 h-3" />
-              <span className="hidden sm:inline">SKIP</span>
+              <span className="hidden sm:inline">LANGKAU</span>
             </button>
           )}
 
@@ -148,10 +145,10 @@ export const TeacherControlBar: React.FC<TeacherControlBarProps> = ({
                   ? 'bg-cyan-500 text-slate-950 border-cyan-300 shadow-md ring-1 ring-cyan-300'
                   : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
               }`}
-              title="Toggle Full 3D Arena View (Hides overlays to see the full stadium, track and Hana)"
+              title="Papar stadium 3D penuh tanpa halangan"
             >
               {isArenaFocused ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5 text-cyan-400" />}
-              <span className="hidden sm:inline">{isArenaFocused ? 'EXIT FULL VIEW' : 'FULL 3D VIEW'}</span>
+              <span className="hidden sm:inline">{isArenaFocused ? 'KELUAR 3D' : 'PANDANGAN 3D'}</span>
             </button>
           )}
         </div>
@@ -165,14 +162,14 @@ export const TeacherControlBar: React.FC<TeacherControlBarProps> = ({
                 ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300 ring-2 ring-emerald-500/30'
                 : 'bg-rose-500/20 border-rose-400 text-rose-300 ring-2 ring-rose-500/30'
             }`}
-            title="Toggle Red Light (Freeze) / Green Light (Answer)"
+            title="Tukar Lampu Hijau / Merah"
           >
             <span
               className={`w-3 h-3 rounded-full animate-ping ${
                 isGreen ? 'bg-emerald-400' : 'bg-rose-500'
               }`}
             />
-            <span>{isGreen ? '🟢 GREEN LIGHT: ACTIVE' : '🔴 RED LIGHT: FREEZE!'}</span>
+            <span>{isGreen ? '🟢 LAMPU HIJAU: AKTIF' : '🔴 LAMPU MERAH: BERHENTI!'}</span>
           </button>
         </div>
 
@@ -191,7 +188,7 @@ export const TeacherControlBar: React.FC<TeacherControlBarProps> = ({
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                {preset === 'ABOVE' ? '🚁 ABOVE' : preset}
+                {preset === 'ABOVE' ? '🚁 ATAS' : preset}
               </button>
             ))}
           </div>
@@ -204,17 +201,17 @@ export const TeacherControlBar: React.FC<TeacherControlBarProps> = ({
                 ? 'bg-purple-600 border-purple-400 text-white shadow-md shadow-purple-500/30'
                 : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
             }`}
-            title="Toggle Projector Optimized High-Contrast Mode"
+            title="Mod Projektor / Kontras Tinggi"
           >
             <Tv className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">PROJECTOR</span>
+            <span className="hidden sm:inline">PROJEKTOR</span>
           </button>
 
           {/* Sound Toggle */}
           <button
             onClick={onToggleSound}
             className="p-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-300 hover:text-white transition-all"
-            title={soundEnabled ? 'Mute Sound' : 'Unmute Sound'}
+            title={soundEnabled ? 'Matikan Bunyi' : 'Hidupkan Bunyi'}
           >
             {soundEnabled ? <Volume2 className="w-4 h-4 text-cyan-400" /> : <VolumeX className="w-4 h-4 text-slate-500" />}
           </button>
@@ -223,7 +220,7 @@ export const TeacherControlBar: React.FC<TeacherControlBarProps> = ({
           <button
             onClick={onRestartGame}
             className="p-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-300 hover:text-white transition-all"
-            title="Restart Game"
+            title="Mula Semula Permainan"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
@@ -232,27 +229,27 @@ export const TeacherControlBar: React.FC<TeacherControlBarProps> = ({
           <button
             onClick={onOpenSetup}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-xl text-xs font-black text-slate-950 shadow-md shadow-cyan-500/20 transition-all"
-            title="Open Teacher Setup & Question Editor"
+            title="Buka Panel Guru & Editor Soalan"
           >
             <Settings className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">TEACHER PANEL</span>
+            <span className="hidden sm:inline">PANEL GURU</span>
           </button>
 
           {/* User Profile & Sign Out */}
           {user && (
             <div className="flex items-center gap-1.5 pl-1.5 border-l border-slate-800">
               {user.photoURL ? (
-                <img src={user.photoURL} alt={user.displayName || 'Teacher'} className="w-6 h-6 rounded-full border border-slate-700" />
+                <img src={user.photoURL} alt={user.displayName || 'Guru'} className="w-6 h-6 rounded-full border border-slate-700" />
               ) : (
                 <div className="w-6 h-6 rounded-full bg-cyan-500 flex items-center justify-center text-[10px] font-bold text-slate-950">
-                  {user.displayName?.[0] || 'T'}
+                  {user.displayName?.[0] || 'G'}
                 </div>
               )}
               {onLogout && (
                 <button
                   onClick={onLogout}
                   className="p-1.5 bg-slate-800 hover:bg-rose-500/20 border border-slate-700 hover:border-rose-500/40 text-slate-400 hover:text-rose-300 rounded-xl transition-all"
-                  title="Sign Out of Google Account"
+                  title="Log Keluar"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                 </button>
